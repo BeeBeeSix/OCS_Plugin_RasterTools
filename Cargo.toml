@@ -1,0 +1,41 @@
+[package]
+name = "opencad-raster-plugin"
+version = "0.10.1"
+edition = "2021"
+description = "Raster Tools add-on for Open CAD Studio — rectangular clip / hole / split, resize (drag, size, DPI), relink and find moved GIF/JPG/PNG/BMP/TIFF/WebP images."
+license = "GPL-3.0-only"
+repository = "https://github.com/Macchecaspita/opencad-raster-plugin"
+
+# A plugin is a C-ABI dynamic library the host loads at runtime (in its own
+# runner process). `rlib` as well so `cargo test` can link the unit tests.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# The stable contract, with the runtime `host` surface (HostApi / BuiltinPlugin).
+# Pinned to the v2026.45 RELEASE TAG commit (Plugin API 16). The host refuses
+# a plugin whose codec types differ from its own (wire schema check), so a
+# build works only with the CAD release it was pinned to. The host's entity model comes re-exported as
+# `ocs_plugin_api::host::codec`, so plugin and host share one set of codec
+# types and no separate codec dependency is declared here.
+#
+# To target a newer Open CAD Studio release, replace `rev` with that release
+# tag's commit (`git ls-remote --tags https://github.com/HakanSeven12/OpenCADStudio`)
+# and update `api_version` in plugin.toml to the API_VERSION it exports.
+ocs_plugin_api = { git = "https://github.com/HakanSeven12/OpenCADStudio", rev = "fb0a667e269b6c924233ecd450a11dd7cba40eea", features = ["host"] }
+# Reads Open CAD Studio's settings.json to follow its interface language.
+serde_json = "1"
+# Decode the image files (same decoders as Open CAD Studio) and write the
+# transparent PNG copy for RT_TRANSP.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "tiff", "webp"] }
+# RT_OSM: EPSG code -> longitude/latitude (pure Rust, with the EPSG definition table).
+proj4rs = { version = "0.3", features = ["crs-definitions"] }
+# RT_OSM: download web-map tiles (same TLS setup as Open CAD Studio itself).
+ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
+
+[workspace]
