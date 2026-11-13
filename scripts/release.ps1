@@ -6,7 +6,8 @@
     1. controlla il numero di versione e che il tag non esista già;
     2. aggiorna la versione in Cargo.toml e plugin.toml;
     3. in CHANGELOG.md sposta le voci di "[Non rilasciato]" in una nuova
-       sezione "## [versione] - data";
+       sezione "## [versione] - data" (lo stesso fa per CHANGELOG_en.md,
+       con "[Unreleased]", se il file esiste);
     4. esegue i test e compila il plugin;
     5. dopo la tua conferma crea il commit e il tag e li carica su GitHub.
     Il tag avvia il workflow release.yml, che compila per Windows, Linux e
@@ -15,10 +16,10 @@
     Se rispondi "no" alla conferma, i file tornano come prima.
 
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File scripts\release.ps1 0.2.0
+    powershell -ExecutionPolicy Bypass -File scripts\release.ps1 0.10.2
 
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File scripts\release.ps1 0.2.0 -SkipBuild
+    powershell -ExecutionPolicy Bypass -File scripts\release.ps1 0.10.2 -SkipBuild
 #>
 param(
     [Parameter(Mandatory = $true, Position = 0)]
@@ -54,7 +55,7 @@ function Run {
 
 $Version = $Version.Trim().TrimStart('v', 'V')
 if ($Version -notmatch '^\d+\.\d+\.\d+$') {
-    Fail "versione '$Version' non valida: usa tre numeri, per esempio 0.2.0"
+    Fail "versione '$Version' non valida: usa tre numeri, per esempio 0.10.2"
 }
 $Tag = "v$Version"
 
@@ -98,8 +99,11 @@ $verRe = '(?m)^(version\s*=\s*")([^"]*)(")'
 $m = [regex]::Match($cargo, $verRe)
 if (-not $m.Success) { Fail "non trovo 'version = ...' in Cargo.toml." }
 $Current = $m.Groups[2].Value
-if ([version]$Version -le [version]$Current) {
-    Fail "la nuova versione ($Version) deve essere maggiore di quella attuale ($Current)."
+if ([version]$Version -lt [version]$Current) {
+    Fail "la nuova versione ($Version) non può essere minore di quella attuale ($Current)."
+}
+if ([version]$Version -eq [version]$Current) {
+    Info "Cargo.toml e plugin.toml sono già alla versione ${Version}: pubblico quella."
 }
 
 # ── CHANGELOG ────────────────────────────────────────────────────────────────
@@ -129,6 +133,30 @@ else {
     $newChangelog = $changelog.Substring(0, $insertAt) + $nl + $nl + "## [$Version] - $date" + $changelog.Substring($insertAt)
 }
 
+# CHANGELOG_en.md (English copy): same move, from "[Unreleased]". Never blocks the release.
+$enPath = Join-Path $Root 'CHANGELOG_en.md'
+$changelogEn = $null
+$newChangelogEn = $null
+if (Test-Path $enPath) {
+    $changelogEn = Read-Text 'CHANGELOG_en.md'
+    $newChangelogEn = $changelogEn
+    $nlEn = "`n"
+    if ($changelogEn.Contains("`r`n")) { $nlEn = "`r`n" }
+    if ($changelogEn -match ('(?m)^## \[' + [regex]::Escape($Version) + '\]')) {
+        Info "CHANGELOG_en.md already has section ${Version}."
+    }
+    else {
+        $headEn = [regex]::Match($changelogEn, '(?m)^## \[Unreleased\][ \t]*(?=\r?$)')
+        if (-not $headEn.Success) {
+            Write-Host "AVVISO: in CHANGELOG_en.md manca '## [Unreleased]': il file non viene aggiornato." -ForegroundColor Yellow
+        }
+        else {
+            $insertEn = $headEn.Index + $headEn.Length
+            $newChangelogEn = $changelogEn.Substring(0, $insertEn) + $nlEn + $nlEn + "## [$Version] - $date" + $changelogEn.Substring($insertEn)
+        }
+    }
+}
+
 # ── Aggiornamento dei file ─────────────────────────────────────────────────
 
 $originals = @{
@@ -136,6 +164,7 @@ $originals = @{
     'plugin.toml'  = $plugin
     'CHANGELOG.md' = $changelog
 }
+if ($null -ne $changelogEn) { $originals['CHANGELOG_en.md'] = $changelogEn }
 $lockPath = Join-Path $Root 'Cargo.lock'
 $lockOriginal = $null
 if (Test-Path $lockPath) { $lockOriginal = Read-Text 'Cargo.lock' }
@@ -150,6 +179,7 @@ $rx = New-Object System.Text.RegularExpressions.Regex($verRe)
 Write-Text 'Cargo.toml' ($rx.Replace($cargo, ('${1}' + $Version + '${3}'), 1))
 Write-Text 'plugin.toml' ($rx.Replace($plugin, ('${1}' + $Version + '${3}'), 1))
 Write-Text 'CHANGELOG.md' $newChangelog
+if ($null -ne $newChangelogEn) { Write-Text 'CHANGELOG_en.md' $newChangelogEn }
 Ok "Versione aggiornata: $Current -> $Version (Cargo.toml, plugin.toml, CHANGELOG.md)."
 
 try {
@@ -190,8 +220,13 @@ if (-not $Yes) {
 
 try {
     Run 'git' @('add', '-A')
-    Run 'git' @('commit', '-m', "Versione $Version")
-    Run 'git' @('push', 'origin', 'main')
+    if (& git status --porcelain) {
+        Run 'git' @('commit', '-m', "Versione $Version")
+        Run 'git' @('push', 'origin', 'main')
+    }
+    else {
+        Info "Niente da salvare: il commit è già a posto."
+    }
     Run 'git' @('tag', '-a', $Tag, '-m', "Raster Tools $Version")
     Run 'git' @('push', 'origin', $Tag)
 }

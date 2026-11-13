@@ -6,7 +6,7 @@
 > and comes with no warranty (see the GPL-3.0 licence): keep a copy of your
 > drawings before using it on real work. Early version (0.x): features may
 > change. What's new is in the [changelog](CHANGELOG.md) (in Italian); ideas and
-> bug reports are welcome in the [Issues](https://github.com/Macchecaspita/opencad-raster-plugin/issues).
+> bug reports are welcome in the [Issues](https://github.com/BeeBeeSix/OCS_Plugin_RasterTools/issues).
 
 A plugin for [Open CAD Studio](https://github.com/HakanSeven12/OpenCADStudio)
 that adds a **Raster** ribbon tab for GIF, JPG, PNG, BMP, TIFF and WebP images
@@ -57,9 +57,9 @@ on the Raster tab shows a short guide.
 ## Install
 
 In Open CAD Studio's **Plugin Manager** (command `PLUGINS`):
-**Add repository →** `Macchecaspita/opencad-raster-plugin`, pick the latest
+**Add repository →** `BeeBeeSix/OCS_Plugin_RasterTools`, pick the latest
 version and press *Install*. Published versions are in
-[Releases](https://github.com/Macchecaspita/opencad-raster-plugin/releases).
+[Releases](https://github.com/BeeBeeSix/OCS_Plugin_RasterTools/releases).
 
 Or by hand: copy the built library **and** `plugin.toml` into
 

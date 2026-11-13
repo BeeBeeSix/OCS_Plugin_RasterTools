@@ -319,7 +319,7 @@ pub fn render(crs: &Crs, p: &Plan, m: &Mosaic) -> Vec<u8> {
 
 fn user_agent() -> String {
     format!(
-        "OpenCADStudio-RasterPlugin/{} (base-map import; +https://github.com/HakanSeven12/OpenCADStudio)",
+        "OpenCADStudio-RasterPlugin/{} (base-map import; +https://github.com/BeeBeeSix/OCS_Plugin_RasterTools)",
         env!("CARGO_PKG_VERSION")
     )
 }
@@ -353,6 +353,7 @@ pub fn check_template(t: &str) -> Result<(), String> {
 /// User-Agent, 20 s timeout), one tile at a time.
 pub fn http_fetcher(template: &str) -> impl FnMut(u8, u32, u32) -> Result<RgbaImage, String> {
     let template = template.to_string();
+    let use_cache = !is_esri(&template); // Esri's terms forbid keeping tiles offline
     let dir = cache_dir(&template);
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(20)))
@@ -361,7 +362,7 @@ pub fn http_fetcher(template: &str) -> impl FnMut(u8, u32, u32) -> Result<RgbaIm
         .into();
     move |z, x, y| {
         let file = dir.join(z.to_string()).join(x.to_string()).join(format!("{y}.png"));
-        let fresh = std::fs::metadata(&file)
+        let fresh = use_cache && std::fs::metadata(&file)
             .and_then(|m| m.modified())
             .ok()
             .and_then(|t| t.elapsed().ok())
@@ -379,7 +380,9 @@ pub fn http_fetcher(template: &str) -> impl FnMut(u8, u32, u32) -> Result<RgbaIm
         if let Some(parent) = file.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        let _ = std::fs::write(&file, &bytes);
+        if use_cache {
+            let _ = std::fs::write(&file, &bytes);
+        }
         Ok(img)
     }
 }
@@ -387,6 +390,131 @@ pub fn http_fetcher(template: &str) -> impl FnMut(u8, u32, u32) -> Result<RgbaIm
 /// True for the default OpenStreetMap tile server.
 pub fn is_osm(template: &str) -> bool {
     host_of(template).ends_with("openstreetmap.org")
+}
+
+/// Esri World Imagery (the only service whose layer 4 is the imagery citation layer).
+pub fn is_esri(template: &str) -> bool {
+    host_of(template).ends_with("arcgisonline.com") && template.contains("/World_Imagery/MapServer/tile/")
+}
+
+/// Tile-source presets shown in the dialog: (label, URL template). A last
+/// "custom" entry (index `PRESETS.len()`) uses the URL text field.
+pub const PRESETS: [(&str, &str); 3] = [
+    ("OpenStreetMap (map)", OSM_URL),
+    ("Esri World Imagery (aerial)", "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"),
+    ("USGS Imagery (US aerial, NAIP)", "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}"),
+];
+
+/// Index of the preset whose URL is `url`, or the "custom" index.
+pub fn preset_index(url: &str) -> usize {
+    PRESETS.iter().position(|(_, u)| *u == url).unwrap_or(PRESETS.len())
+}
+
+/// Esri World Imagery terms, condensed from the terms text supplied by the user.
+pub const ESRI_TERMS: &str = "Esri World Imagery - terms of use (summary)\n\
+- Using the service directly requires compliance with Esri's Master License Agreement and the ArcGIS Online item constraints.\n\
+- Production, commercial or government use requires a valid ArcGIS Online subscription, ArcGIS Enterprise licence or ArcGIS Developer plan. Non-commercial and personal projects may use a free ArcGIS Developer/public account, subject to usage limits.\n\
+- Attribution is mandatory: any map showing these tiles must visibly credit Esri and its data contributors (Esri, Maxar, Earthstar Geographics, and the GIS User Community).\n\
+- No scraping, bulk downloading or permanent offline storage of tiles outside Esri's permitted offline workflows. (RT_OSM keeps no tile cache for Esri; the inserted image is the only stored copy - check that this suits your licence.)\n\
+- Tracing/digitising vector features over the imagery, and sharing those vectors, is permitted.";
+
+// ── Esri imagery citation (layer 4) ─────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Meta {
+    pub date: String,
+    pub res: Option<f64>,
+    pub acc: Option<f64>,
+    pub provider: String,
+    pub desc: String,
+    pub levels: (i64, i64),
+}
+
+/// Citation-layer query for a point: `…/MapServer/4/query?…`.
+pub fn metadata_url(template: &str, lon: f64, lat: f64) -> Option<String> {
+    let base = template.split("/MapServer/tile/").next().filter(|_| is_esri(template))?;
+    Some(format!(
+        "{base}/MapServer/4/query?where=1%3D1&geometry={lon:.6},{lat:.6}&geometryType=esriGeometryPoint&inSR=4326\
+&spatialRel=esriSpatialRelIntersects&outFields=SRC_DATE,SRC_RES,SRC_ACC,SRC_DESC,NICE_NAME,NICE_DESC,MinMapLevel,MaxMapLevel\
+&returnGeometry=false&f=json"
+    ))
+}
+
+/// Features of a layer-4 query answer; those covering `zoom` when any do.
+pub fn parse_metadata(json: &str, zoom: u8) -> Result<Vec<Meta>, String> {
+    let v: serde_json::Value = serde_json::from_str(json).map_err(|e| e.to_string())?;
+    if let Some(err) = v.get("error") {
+        return Err(err.to_string());
+    }
+    let feats = v.get("features").and_then(|f| f.as_array()).ok_or("no \"features\" in the answer")?;
+    let mut all: Vec<Meta> = Vec::new();
+    for f in feats {
+        let a = &f["attributes"];
+        let text = |k: &str| a[k].as_str().unwrap_or("").trim().to_string();
+        let d = a["SRC_DATE"].as_i64().unwrap_or(0);
+        let date = if d > 19000000 { format!("{:04}-{:02}-{:02}", d / 10000, d / 100 % 100, d % 100) } else { "unknown".into() };
+        all.push(Meta {
+            date,
+            res: a["SRC_RES"].as_f64().filter(|r| *r > 0.0),
+            acc: a["SRC_ACC"].as_f64().filter(|r| *r > 0.0),
+            provider: text("NICE_DESC"),
+            desc: { let n = text("NICE_NAME"); if n.is_empty() { text("SRC_DESC") } else { n } },
+            levels: (a["MinMapLevel"].as_i64().unwrap_or(0), a["MaxMapLevel"].as_i64().unwrap_or(99)),
+        });
+    }
+    let z = i64::from(zoom);
+    let at_zoom: Vec<Meta> = all.iter().filter(|m| m.levels.0 <= z && z <= m.levels.1).cloned().collect();
+    Ok(if at_zoom.is_empty() { all } else { at_zoom })
+}
+
+/// MTEXT contents (`\P` = new paragraph) for the citations found.
+pub fn metadata_mtext(zoom: u8, rows: &[Meta]) -> String {
+    let mut s = format!("Esri World Imagery - source info (zoom {zoom})");
+    for m in rows {
+        s.push_str(&format!("\\P{}: {}", m.date, if m.desc.is_empty() { &m.provider } else { &m.desc }));
+        if !m.provider.is_empty() && !m.desc.is_empty() {
+            s.push_str(&format!(" ({})", m.provider));
+        }
+        if let Some(r) = m.res {
+            s.push_str(&format!(", res {r} m"));
+        }
+        if let Some(a) = m.acc {
+            s.push_str(&format!(", acc {a} m"));
+        }
+    }
+    s.push_str("\\PSource: Esri, Maxar, Earthstar Geographics, and the GIS User Community");
+    s
+}
+
+/// Query the citation layer at several points (de-duplicated).
+pub fn fetch_metadata(template: &str, zoom: u8, points: &[(f64, f64)]) -> Result<Vec<Meta>, String> {
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(20)))
+        .user_agent(user_agent())
+        .build()
+        .into();
+    let mut out: Vec<Meta> = Vec::new();
+    let mut last_err = None;
+    for (lon, lat) in points {
+        let Some(url) = metadata_url(template, *lon, *lat) else { return Err("not an Esri World Imagery source".into()) };
+        let r = agent
+            .get(&url)
+            .call()
+            .map_err(|e| e.to_string())
+            .and_then(|mut r| r.body_mut().read_to_string().map_err(|e| e.to_string()))
+            .and_then(|t| parse_metadata(&t, zoom));
+        match r {
+            Ok(rows) => {
+                for m in rows {
+                    if !out.contains(&m) {
+                        out.push(m);
+                    }
+                }
+            }
+            Err(e) => last_err = Some(e),
+        }
+    }
+    if out.is_empty() { Err(last_err.unwrap_or_else(|| "no citation features at the area".into())) } else { Ok(out) }
 }
 
 fn host_of(template: &str) -> String {
@@ -397,6 +525,8 @@ fn host_of(template: &str) -> String {
 pub fn credit(template: &str) -> String {
     if is_osm(template) {
         ATTRIBUTION.to_string()
+    } else if is_esri(template) {
+        "Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community".to_string()
     } else {
         format!("Map tiles: {} - check the source's licence", host_of(template))
     }
@@ -419,6 +549,26 @@ mod tests {
 
     fn close(a: f64, b: f64, tol: f64) -> bool {
         (a - b).abs() <= tol
+    }
+
+    #[test]
+    fn esri_metadata_parse_and_text() {
+        let t = PRESETS[1].1;
+        assert!(is_esri(t) && !is_esri(PRESETS[2].1) && credit(t).contains("Esri"));
+        let u = metadata_url(t, -121.5, 38.6).unwrap();
+        assert!(u.starts_with("https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/4/query?"), "{u}");
+        assert!(u.contains("geometry=-121.500000,38.600000"));
+        let j = r#"{"features":[
+          {"attributes":{"SRC_DATE":20220615,"SRC_RES":0.3,"SRC_ACC":2.5,"NICE_NAME":"Maxar","NICE_DESC":"Maxar","MinMapLevel":15,"MaxMapLevel":19}},
+          {"attributes":{"SRC_DATE":20200101,"SRC_RES":15,"SRC_ACC":0,"NICE_NAME":"TerraColor","NICE_DESC":"Esri","MinMapLevel":0,"MaxMapLevel":8}}]}"#;
+        let r = parse_metadata(j, 17).unwrap();
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].date, "2022-06-15");
+        assert_eq!(r[0].res, Some(0.3));
+        assert_eq!(parse_metadata(j, 12).unwrap().len(), 2);
+        let m = metadata_mtext(17, &r);
+        assert!(m.contains("2022-06-15: Maxar") && m.contains("\\P") && m.contains("res 0.3 m"), "{m}");
+        assert!(parse_metadata(r#"{"error":{"code":400}}"#, 1).is_err());
     }
 
     #[test]

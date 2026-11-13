@@ -1252,18 +1252,29 @@ pub struct OsmJob {
     pub pixel: Option<f64>,
     pub max_tiles: u32,
     pub url: String,
+    /// Add an MTEXT with the imagery source info (Esri World Imagery only).
+    pub meta: bool,
+}
+
+/// The dialog's answers.
+pub struct OsmAnswer {
+    pub epsg: u16,
+    pub pixel: Option<f64>,
+    pub max_tiles: u32,
+    pub url: String,
+    pub meta: bool,
 }
 
 static OSM_JOB: Mutex<Option<OsmJob>> = Mutex::new(None);
-/// EPSG code and tile source of the last run, offered again next time.
-static OSM_LAST: Mutex<Option<(u16, String)>> = Mutex::new(None);
+/// Settings of the last run/dialog, offered again next time.
+static OSM_LAST: Mutex<Option<(u16, String, Option<f64>, u32, bool)>> = Mutex::new(None);
 
-fn osm_defaults() -> (u16, String) {
+fn osm_defaults() -> (u16, String, Option<f64>, u32, bool) {
     OSM_LAST
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .clone()
-        .unwrap_or((32610, crate::osm::OSM_URL.to_string()))
+        .unwrap_or((32610, crate::osm::OSM_URL.to_string(), None, 64, true))
 }
 
 pub fn clear_osm_job() {
@@ -1271,11 +1282,11 @@ pub fn clear_osm_job() {
 }
 
 /// Fill the dialog's answers into the pending job; false when there is none.
-pub fn update_osm_job(epsg: u16, pixel: Option<f64>, max_tiles: u32, url: String) -> bool {
+pub fn update_osm_job(a: OsmAnswer) -> bool {
     let mut g = OSM_JOB.lock().unwrap_or_else(|e| e.into_inner());
     let Some(j) = g.as_mut() else { return false };
-    (j.epsg, j.pixel, j.max_tiles, j.url) = (epsg, pixel, max_tiles, url.clone());
-    *OSM_LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((epsg, url));
+    (j.epsg, j.pixel, j.max_tiles, j.url, j.meta) = (a.epsg, a.pixel, a.max_tiles, a.url.clone(), a.meta);
+    *OSM_LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((a.epsg, a.url, a.pixel, a.max_tiles, a.meta));
     true
 }
 
@@ -1297,26 +1308,68 @@ fn selected_rectangle(host: &dyn HostApi) -> Option<[f64; 4]> {
     b.filter(|r| r[2] > r[0] && r[3] > r[1])
 }
 
-/// `RT_OSM` — select the rectangle (closed polyline) first, then run it.
-/// `RT_OSM <epsg> [pixel] [max-tiles]` skips the dialog; `RT_OSM @` is the
-/// dialog's own re-dispatch.
+/// Remember the area and open the dialog with the last settings.
+fn osm_open_dialog(host: &mut dyn HostApi, bbox: [f64; 4]) {
+    let (epsg, url, pixel, max_tiles, meta) = osm_defaults();
+    let job = OsmJob { bbox, epsg, pixel, max_tiles, url: url.clone(), meta };
+    *OSM_JOB.lock().unwrap_or_else(|e| e.into_inner()) = Some(job);
+    host.start_interactive(Box::new(tools::OsmDialog::new(epsg, url, bbox, pixel, max_tiles, meta)));
+}
+
+fn show_esri_terms(host: &mut dyn HostApi) {
+    for line in crate::osm::ESRI_TERMS.lines() {
+        host.push_info(line);
+    }
+}
+
+/// `RT_OSM` — with a closed polyline selected it defines the area; otherwise
+/// the command asks for the lower-left and upper-right corners.
+/// `RT_OSM <epsg> [pixel] [max-tiles]` skips the dialog; the `@`, `#pick`,
+/// `#box`, `#dialog` and `#terms` arguments are the dialog's own re-dispatches.
 fn osm_command(host: &mut dyn HostApi, args: &[&str]) {
-    if args.first() == Some(&"@") {
-        let job = OSM_JOB.lock().unwrap_or_else(|e| e.into_inner()).take();
-        match job {
-            Some(j) => osm_run(host, j),
-            None => host.push_error("RT_OSM: nothing to do (start it again from the Base map button)."),
+    match args.first().copied() {
+        Some("@") => {
+            let job = OSM_JOB.lock().unwrap_or_else(|e| e.into_inner()).take();
+            match job {
+                Some(j) => osm_run(host, j),
+                None => host.push_error("RT_OSM: nothing to do (start it again from the Base map button)."),
+            }
+            return;
+        }
+        Some("#pick") => {
+            clear_osm_job();
+            host.start_interactive(Box::new(tools::CornerPick::new()));
+            return;
+        }
+        Some("#box") => {
+            let n: Vec<f64> = args[1..].iter().filter_map(|a| a.parse().ok()).collect();
+            if let [x0, y0, x1, y1] = n[..] {
+                osm_open_dialog(host, [x0.min(x1), y0.min(y1), x0.max(x1), y0.max(y1)]);
+            }
+            return;
+        }
+        Some("#dialog") | Some("#terms") => {
+            if args[0] == "#terms" {
+                show_esri_terms(host);
+            }
+            let bbox = OSM_JOB.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|j| j.bbox);
+            match bbox {
+                Some(b) => osm_open_dialog(host, b),
+                None => host.start_interactive(Box::new(tools::CornerPick::new())),
+            }
+            return;
+        }
+        _ => {}
+    }
+    let (_, url, ..) = osm_defaults();
+    let Some(bbox) = selected_rectangle(host) else {
+        if args.is_empty() {
+            host.start_interactive(Box::new(tools::CornerPick::new()));
+        } else {
+            host.push_error("RT_OSM: select the rectangle (closed polyline) first, or run RT_OSM alone to pick two corners.");
         }
         return;
-    }
-    let Some(bbox) = selected_rectangle(host) else {
-        host.push_error(tr!(
-            "RT_OSM: seleziona prima il rettangolo (polilinea chiusa) che definisce l'area, poi lancia RT_OSM.",
-            "RT_OSM: select the rectangle (a closed polyline) that defines the area first, then run RT_OSM."
-        ));
-        return;
     };
-    let (last_epsg, url) = osm_defaults();
     if let Some(code) = args.first() {
         let code = code.trim_start_matches(|c: char| c.is_ascii_alphabetic() || c == ':');
         let Ok(epsg) = code.parse::<u16>() else {
@@ -1325,13 +1378,11 @@ fn osm_command(host: &mut dyn HostApi, args: &[&str]) {
         };
         let pixel = args.get(1).and_then(|a| a.replace(',', ".").parse::<f64>().ok()).filter(|p| *p > 0.0);
         let max_tiles = args.get(2).and_then(|a| a.parse::<u32>().ok()).unwrap_or(64).clamp(1, 400);
-        *OSM_LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((epsg, url.clone()));
-        osm_run(host, OsmJob { bbox, epsg, pixel, max_tiles, url });
+        *OSM_LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((epsg, url.clone(), pixel, max_tiles, true));
+        osm_run(host, OsmJob { bbox, epsg, pixel, max_tiles, url, meta: true });
         return;
     }
-    *OSM_JOB.lock().unwrap_or_else(|e| e.into_inner()) =
-        Some(OsmJob { bbox, epsg: last_epsg, pixel: None, max_tiles: 64, url: url.clone() });
-    host.start_interactive(Box::new(tools::OsmDialog::new(last_epsg, url, bbox)));
+    osm_open_dialog(host, bbox);
 }
 
 fn osm_run(host: &mut dyn HostApi, job: OsmJob) {
@@ -1422,6 +1473,30 @@ fn osm_run(host: &mut dyn HostApi, job: OsmJob) {
     t.height = h;
     t.common.layer = layer.to_string();
     host.add_entity(EntityType::Text(t));
+
+    // Esri: imagery dates / resolution / provider from the service's citation layer (MapServer/4).
+    if job.meta && osm::is_esri(&job.url) {
+        let mid = ((e0 + e1) / 2.0, (n0 + n1) / 2.0);
+        let pts: Vec<(f64, f64)> = [mid, (e0, n0), (e1, n0), (e0, n1), (e1, n1)]
+            .iter()
+            .filter_map(|(e, n)| crs.lonlat(*e, *n))
+            .collect();
+        match osm::fetch_metadata(&job.url, plan.zoom, &pts) {
+            Ok(rows) => {
+                let width = plan.width as f64 * plan.pixel;
+                let top = p.ins[1] + plan.height as f64 * plan.pixel;
+                let mut m = codec::entities::MText::with_value(
+                    osm::metadata_mtext(plan.zoom, &rows),
+                    Vector3::new(p.ins[0] + width + h, top, 0.0),
+                )
+                .with_height(h);
+                m.common.layer = layer.to_string();
+                host.add_entity(EntityType::MText(Box::new(m)));
+                host.push_info(&format!("RT_OSM: imagery source info added ({} source(s)).", rows.len()));
+            }
+            Err(e) => host.push_error(&format!("RT_OSM: could not read the Esri imagery info ({e}). The image was inserted without it.")),
+        }
+    }
 }
 
 // ── PDF, draw order, clean-up, diagnostics ──────────────────────────────────

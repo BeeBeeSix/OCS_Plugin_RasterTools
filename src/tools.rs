@@ -863,24 +863,28 @@ pub struct OsmDialog {
 }
 
 impl OsmDialog {
-    pub fn new(epsg: u16, url: String, bbox: [f64; 4]) -> Self {
+    pub fn new(epsg: u16, url: String, bbox: [f64; 4], pixel: Option<f64>, tiles: u32, meta: bool) -> Self {
         let (w, h) = (bbox[2] - bbox[0], bbox[3] - bbox[1]);
-        let def = DialogDef::new(tr!("Mappa base (OpenStreetMap)", "Base map (OpenStreetMap)"))
+        let preset = crate::osm::preset_index(&url);
+        let mut names: Vec<&str> = crate::osm::PRESETS.iter().map(|(n, _)| *n).collect();
+        names.push(tr!("Altro (URL qui sotto)", "Custom (URL below)"));
+        let def = DialogDef::new(tr!("Mappa base", "Base map"))
             .with_control(info(
                 tr!(
                     format!(
-                        "Area: {:.1} × {:.1} unità, da E {:.1} N {:.1}.\nLe tessere web-map vengono scaricate, riproiettate nel sistema del disegno \
+                        "Area: {:.1} × {:.1} unità, angolo in basso a sinistra E {:.1} N {:.1}, in alto a destra E {:.1} N {:.1}.\nLe tessere web-map vengono scaricate, riproiettate nel sistema del disegno \
                          e inserite come immagine (PNG + file world accanto al disegno).",
-                        w, h, bbox[0], bbox[1]
+                        w, h, bbox[0], bbox[1], bbox[2], bbox[3]
                     ),
                     format!(
-                        "Area: {:.1} × {:.1} units, from E {:.1} N {:.1}.\nWeb-map tiles are downloaded, reprojected to the drawing's \
+                        "Area: {:.1} × {:.1} units, lower-left E {:.1} N {:.1}, upper-right E {:.1} N {:.1}.\nWeb-map tiles are downloaded, reprojected to the drawing's \
                          coordinate system and inserted as an image (PNG + world file beside the drawing).",
-                        w, h, bbox[0], bbox[1]
+                        w, h, bbox[0], bbox[1], bbox[2], bbox[3]
                     )
                 )
                 .into(),
             ))
+            .with_control(choice("source", tr!("Sorgente mappa", "Map source"), &names, preset))
             .with_control(DialogControl::Number {
                 id: "epsg".into(),
                 label: tr!("Codice EPSG del disegno (UTM 32610 = zona 10N WGS84)", "Drawing EPSG code (UTM 32610 = zone 10N WGS84)").into(),
@@ -892,7 +896,7 @@ impl OsmDialog {
             .with_control(DialogControl::Number {
                 id: "pixel".into(),
                 label: tr!("Dimensione pixel in unità (0 = automatica, la più fine possibile)", "Pixel size in units (0 = automatic, as fine as possible)").into(),
-                default: 0.0,
+                default: pixel.unwrap_or(0.0),
                 min: Some(0.0),
                 max: None,
                 step: Some(0.1),
@@ -900,15 +904,42 @@ impl OsmDialog {
             .with_control(DialogControl::Number {
                 id: "tiles".into(),
                 label: tr!("Massimo numero di tessere da scaricare", "Maximum number of tiles to download").into(),
-                default: 64.0,
+                default: f64::from(tiles),
                 min: Some(1.0),
                 max: Some(400.0),
                 step: Some(8.0),
             })
             .with_control(DialogControl::Text {
                 id: "url".into(),
-                label: tr!("Sorgente tessere ({z}/{x}/{y})", "Tile source ({z}/{x}/{y})").into(),
+                label: tr!("URL personalizzato ({z}/{x}/{y}), usato solo con «Altro»", "Custom tile URL ({z}/{x}/{y}), used only for \"Custom\"").into(),
                 default: url,
+            })
+            .with_control(DialogControl::Checkbox {
+                id: "meta".into(),
+                label: tr!(
+                    "Esri: aggiungi un MTEXT con data, risoluzione e fornitore delle immagini",
+                    "Esri: add an MTEXT with the imagery date, resolution and provider"
+                )
+                .into(),
+                default: meta,
+            })
+            .with_control(DialogControl::Checkbox {
+                id: "repick".into(),
+                label: tr!(
+                    "Scegli di nuovo i due angoli (poi si riapre questa finestra)",
+                    "Re-pick the two corners (this dialog reopens afterwards)"
+                )
+                .into(),
+                default: false,
+            })
+            .with_control(DialogControl::Checkbox {
+                id: "terms".into(),
+                label: tr!(
+                    "Mostra le condizioni d'uso di Esri nella riga di comando (poi si riapre questa finestra)",
+                    "Show the Esri terms of use in the command line (this dialog reopens afterwards)"
+                )
+                .into(),
+                default: false,
             })
             .with_control(info(
                 tr!(
@@ -945,14 +976,85 @@ impl InteractiveCommand for OsmDialog {
         let epsg = get_num(&m, "epsg").unwrap_or(0.0).round().clamp(0.0, 65535.0) as u16;
         let pixel = get_num(&m, "pixel").filter(|p| *p > 0.0);
         let tiles = get_num(&m, "tiles").unwrap_or(64.0).round().clamp(1.0, 400.0) as u32;
-        let url = match m.get("url") {
-            Some(DialogValue::Text(s)) if !s.trim().is_empty() => s.trim().to_string(),
-            _ => crate::osm::OSM_URL.to_string(),
+        let src = get_choice(&m, "source");
+        let url = match crate::osm::PRESETS.get(src) {
+            Some((_, u)) => u.to_string(),
+            None => match m.get("url") {
+                Some(DialogValue::Text(s)) if !s.trim().is_empty() => s.trim().to_string(),
+                _ => crate::osm::OSM_URL.to_string(),
+            },
         };
-        if commands::update_osm_job(epsg, pixel, tiles, url) {
-            CommandStep::Dispatch("RT_OSM @".to_string())
-        } else {
-            CommandStep::Cancel
+        let meta = get_bool(&m, "meta", true);
+        let (repick, terms) = (get_bool(&m, "repick", false), get_bool(&m, "terms", false));
+        if !commands::update_osm_job(commands::OsmAnswer { epsg, pixel, max_tiles: tiles, url, meta }) {
+            return CommandStep::Cancel;
+        }
+        match (repick, terms) {
+            (true, _) => deferred("RT_OSM", "#pick".to_string()),
+            (false, true) => deferred("RT_OSM", "#terms".to_string()),
+            _ => CommandStep::Dispatch("RT_OSM @".to_string()),
+        }
+    }
+}
+
+/// Pick the two corners of the base-map area (lower-left, then upper-right),
+/// with a live rectangle and its size in the prompt.
+pub struct CornerPick {
+    first: Option<[f64; 3]>,
+    cur: Option<[f64; 3]>,
+    msg: Option<String>,
+}
+
+impl CornerPick {
+    pub fn new() -> Self {
+        CornerPick { first: None, cur: None, msg: None }
+    }
+}
+
+impl InteractiveCommand for CornerPick {
+    fn prompt(&self) -> String {
+        let p = match (self.first, self.cur) {
+            (None, _) => tr!(
+                "RT_OSM: primo angolo (in basso a sinistra)".to_string(),
+                "RT_OSM: first corner (lower-left)".to_string()
+            ),
+            (Some(a), cur) => {
+                let size = cur
+                    .map(|c| format!(" [{:.1} × {:.1}]", (c[0] - a[0]).abs(), (c[1] - a[1]).abs()))
+                    .unwrap_or_default();
+                tr!(
+                    format!("RT_OSM: angolo opposto (in alto a destra) — primo E {:.2} N {:.2}{size}", a[0], a[1]),
+                    format!("RT_OSM: opposite corner (upper-right) — first E {:.2} N {:.2}{size}", a[0], a[1])
+                )
+            }
+        };
+        with_msg(&self.msg, p)
+    }
+
+    fn on_point(&mut self, pt: [f64; 3]) -> CommandStep {
+        let Some(a) = self.first else {
+            self.first = Some(pt);
+            self.msg = None;
+            return CommandStep::NeedPoint;
+        };
+        if (pt[0] - a[0]).abs() < 1e-9 || (pt[1] - a[1]).abs() < 1e-9 {
+            self.msg = Some(tr!("i due angoli devono differire in X e in Y", "the two corners must differ in both X and Y").into());
+            return CommandStep::NeedPoint;
+        }
+        deferred("RT_OSM", format!("#box {} {} {} {}", a[0], a[1], pt[0], pt[1]))
+    }
+
+    fn on_cursor_move(&mut self, pt: [f64; 3]) -> Vec<PreviewWire> {
+        self.cur = Some(pt);
+        match self.first {
+            None => Vec::new(),
+            Some(a) => {
+                let z = a[2];
+                vec![PreviewWire::with_color(
+                    vec![a, [pt[0], a[1], z], [pt[0], pt[1], z], [a[0], pt[1], z], a],
+                    CYAN,
+                )]
+            }
         }
     }
 }

@@ -1,4 +1,4 @@
-# Registro delle modifiche:  **Italiano** · [English](CHANGELOG_en.md)
+# Registro delle modifiche
 
 Tutte le modifiche rilevanti di Raster Tools sono annotate qui.
 Formato: [Keep a Changelog](https://keepachangelog.com/it/1.1.0/).
@@ -11,6 +11,21 @@ lo script `scripts/release.ps1` le sposta nella nuova versione al momento
 del rilascio.
 
 ## [Non rilasciato]
+
+## [0.10.2] - 2026-11-14
+
+### Aggiunto
+- `RT_OSM` senza selezione: chiede l'angolo in basso a sinistra e quello in alto a destra
+  (rettangolo e dimensioni in tempo reale); nella finestra la casella «Scegli di nuovo i due angoli» li richiede.
+- Elenco a discesa delle sorgenti: OpenStreetMap, Esri World Imagery, USGS Imagery, Altro (URL).
+- Casella «Mostra le condizioni d'uso di Esri» (testo nella riga di comando).
+- Esri World Imagery: MTEXT con data, risoluzione, precisione e fornitore delle immagini
+  (livello 4 «Citations» del servizio), accanto all'immagine. Per Esri non si tiene la cache delle tessere.
+
+### Corretto
+- `RT_OSM`: dopo il secondo angolo il comando veniva annullato («Command cancelled»): l'Invio
+  aggiunto dal CAD alla riga a più parole chiudeva subito la finestra. Ora gli argomenti passano
+  dal meccanismo «deferred» (anche per «Scegli di nuovo» e «Mostra le condizioni»).
 
 ## [0.10.1] - 2026-11-14
 

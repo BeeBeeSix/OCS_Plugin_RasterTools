@@ -139,3 +139,11 @@ Paste any Web-Mercator `{z}/{x}/{y}` template in the dialog's URL field. Check e
 | EOX Sentinel-2 cloudless | see eox.at / cloudless.eox.at | ~10 m, non-commercial use only, attribution required. |
 | OpenAerialMap | per-image tiles | CC BY 4.0, patchy coverage. |
 | Bing | not supported | Terms forbid direct tile URLs. |
+
+## RT_OSM 0.10.2 — area, sources, Esri
+
+- No rectangle selected: RT_OSM asks for the lower-left then upper-right corner (live rectangle + size). Tick "Re-pick the two corners" in the dialog to pick again.
+- "Map source" dropdown: OpenStreetMap / Esri World Imagery / USGS Imagery / Custom URL.
+- "Show the Esri terms of use" prints the terms summary in the command line and reopens the dialog.
+- Esri World Imagery: an MTEXT with imagery date, resolution, accuracy and provider (service layer 4, "Citations") is placed to the right of the image. The layer's fields were checked against Esri's service page; the live query itself has not been run from the build sandbox. If it fails the image is still inserted and the reason is printed.
+- Esri tiles are not cached on disk (Esri's terms forbid offline storage of tiles); the inserted PNG is the only stored copy.
