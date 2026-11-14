@@ -88,4 +88,10 @@ jobs:
           # Versions 0.x are marked "in fase di test" in the title.
           title="Raster Tools ${GITHUB_REF_NAME}"
           case "$GITHUB_REF_NAME" in v0.*) title="$title (versione di test)";; esac
-          gh release create "${GITHUB_REF_NAME}" dist/* --title "$title" --notes-file notes.md --latest
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            # Re-run for a tag that already has a release: refresh it instead of failing.
+            gh release upload "${GITHUB_REF_NAME}" dist/* --clobber
+            gh release edit "${GITHUB_REF_NAME}" --title "$title" --notes-file notes.md --latest
+          else
+            gh release create "${GITHUB_REF_NAME}" dist/* --title "$title" --notes-file notes.md --latest
+          fi
