@@ -1,6 +1,6 @@
 [package]
 name = "opencad-raster-plugin"
-version = "0.10.2"
+version = "0.10.3"
 edition = "2021"
 description = "Raster Tools add-on for Open CAD Studio — rectangular clip / hole / split, resize (drag, size, DPI), relink and find moved GIF/JPG/PNG/BMP/TIFF/WebP images."
 license = "GPL-3.0-only"
@@ -13,7 +13,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # The stable contract, with the runtime `host` surface (HostApi / BuiltinPlugin).
-# Pinned to the v2026.45 RELEASE TAG commit (Plugin API 16). The host refuses
+# Pinned to the v2026.46 RELEASE TAG commit (Plugin API 23). The host refuses
 # a plugin whose codec types differ from its own (wire schema check), so a
 # build works only with the CAD release it was pinned to. The host's entity model comes re-exported as
 # `ocs_plugin_api::host::codec`, so plugin and host share one set of codec
@@ -22,7 +22,7 @@ crate-type = ["cdylib", "rlib"]
 # To target a newer Open CAD Studio release, replace `rev` with that release
 # tag's commit (`git ls-remote --tags https://github.com/HakanSeven12/OpenCADStudio`)
 # and update `api_version` in plugin.toml to the API_VERSION it exports.
-ocs_plugin_api = { git = "https://github.com/HakanSeven12/OpenCADStudio", rev = "fb0a667e269b6c924233ecd450a11dd7cba40eea", features = ["host"] }
+ocs_plugin_api = { git = "https://github.com/HakanSeven12/OpenCADStudio", rev = "8b4d27046040b27eb07d3faed7b7472bd7bdaea9", features = ["host"] }
 # Reads Open CAD Studio's settings.json to follow its interface language.
 serde_json = "1"
 # Decode the image files (same decoders as Open CAD Studio) and write the

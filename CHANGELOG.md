@@ -12,6 +12,15 @@ del rilascio.
 
 ## [Non rilasciato]
 
+### Aggiunto
+- `RT_OSM`: se il disegno ha una posizione geografica (comando `GEOGRAPHICLOCATION`, oggetto GEODATA),
+  il codice EPSG viene letto da lì e inserito nel campo EPSG della finestra (ha la precedenza
+  sull'ultimo codice usato). Se non c'è posizione geografica, resta l'ultimo codice usato.
+
+### Modificato
+- Ricompilato per Open CAD Studio v2026.46 (API plugin 23): corregge l'errore di caricamento
+  «plugin reads codec types of wire schema …, but the host writes …».
+
 ## [0.10.2] - 2026-11-14
 
 ### Aggiunto

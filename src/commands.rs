@@ -1310,7 +1310,12 @@ fn selected_rectangle(host: &dyn HostApi) -> Option<[f64; 4]> {
 
 /// Remember the area and open the dialog with the last settings.
 fn osm_open_dialog(host: &mut dyn HostApi, bbox: [f64; 4]) {
-    let (epsg, url, pixel, max_tiles, meta) = osm_defaults();
+    let (mut epsg, url, pixel, max_tiles, meta) = osm_defaults();
+    // A geographic location set in the drawing (GEOGRAPHICLOCATION) wins over the last-used code.
+    if let Some(code) = crate::geo::drawing_epsg(host.document()) {
+        epsg = code;
+        host.push_info(&format!("RT_OSM: EPSG {code} taken from the drawing's geographic location."));
+    }
     let job = OsmJob { bbox, epsg, pixel, max_tiles, url: url.clone(), meta };
     *OSM_JOB.lock().unwrap_or_else(|e| e.into_inner()) = Some(job);
     host.start_interactive(Box::new(tools::OsmDialog::new(epsg, url, bbox, pixel, max_tiles, meta)));

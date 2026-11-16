@@ -29,6 +29,7 @@ pub mod imgsize;
 pub mod pixels;
 mod ribbon;
 pub mod geotiff;
+pub mod geo;
 pub mod osm;
 pub mod tools;
 pub mod world;

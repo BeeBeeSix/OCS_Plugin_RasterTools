@@ -11,6 +11,15 @@ release notes are taken from). `scripts/release.ps1` moves the entries under
 
 ## [Unreleased]
 
+### Added
+- `RT_OSM`: when the drawing has a geographic location (the `GEOGRAPHICLOCATION` command, GEODATA object),
+  its EPSG code is read and filled into the dialog's EPSG field (it takes priority over the last-used
+  code). With no geographic location the last-used code is kept.
+
+### Changed
+- Rebuilt for Open CAD Studio v2026.46 (plugin API 23): fixes the load error
+  "plugin reads codec types of wire schema …, but the host writes …".
+
 ## [0.10.2] - 2026-11-14
 
 ### Added
