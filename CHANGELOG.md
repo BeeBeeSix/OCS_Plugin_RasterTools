@@ -12,6 +12,8 @@ del rilascio.
 
 ## [Non rilasciato]
 
+## [0.10.3] - 2026-11-16
+
 ### Aggiunto
 - `RT_OSM`: se il disegno ha una posizione geografica (comando `GEOGRAPHICLOCATION`, oggetto GEODATA),
   il codice EPSG viene letto da lì e inserito nel campo EPSG della finestra (ha la precedenza

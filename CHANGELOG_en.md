@@ -11,6 +11,8 @@ release notes are taken from). `scripts/release.ps1` moves the entries under
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-11-16
+
 ### Added
 - `RT_OSM`: when the drawing has a geographic location (the `GEOGRAPHICLOCATION` command, GEODATA object),
   its EPSG code is read and filled into the dialog's EPSG field (it takes priority over the last-used
