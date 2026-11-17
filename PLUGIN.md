@@ -124,7 +124,7 @@ and restart the CAD. Or publish a GitHub release (the `release.yml` workflow
 does it when a `v*` tag is pushed) and install it from
 **Plugin Manager → Add repository**.
 
-Compatibility: Plugin API 16, Open CAD Studio v2026.45 (for v2026.44 use plugin 0.5.1). For a later CAD release
+Compatibility: Plugin API 23, Open CAD Studio v2026.46 (for v2026.45 use plugin 0.10.2). For a later CAD release
 set `rev` in `Cargo.toml` to its tag's commit and `api_version` in
 `plugin.toml`.
 
