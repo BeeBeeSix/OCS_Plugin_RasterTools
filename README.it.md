@@ -2,12 +2,13 @@
 
 [English](README.md) · **Italiano**
 
-> **Progetto amatoriale, realizzato solo per divertimento.** Non è pensato per un uso
-> professionale e viene fornito senza alcuna garanzia (vedi la licenza GPL-3.0):
+**Problema con la versione 2026.46** - La trasparenza dell'immagine per colore non attiva il ricaricamento (segnala 'obsoleto' / 'stale').
+Chiudi il disegno - riaprilo e, se la trasparenza non viene visualizzata, usa il comando RT_ALPHAON
+
+> Progetto in bozza Viene fornito senza alcuna garanzia (vedi la licenza GPL-3.0) (vedi la licenza GPL-3.0):
 > prima di usarlo su lavori reali, fai una copia dei tuoi disegni.
 > Versione iniziale (0.x): le funzioni potrebbero cambiare. Le novità sono nel
-> [registro delle modifiche](CHANGELOG.md); idee e segnalazioni nelle
-> [Issues](https://github.com/BeeBeeSix/OCS_Plugin_RasterTools/issues).
+> [registro delle modifiche](CHANGELOG.md); idee e segnalazioni nelle [Issues](https://github.com/BeeBeeSix/OCS_Plugin_RasterTools/issues).
 
 Plugin per [Open CAD Studio](https://github.com/HakanSeven12/OpenCADStudio) che
 aggiunge la scheda **Raster** per lavorare sulle immagini GIF, JPG, PNG, BMP,
