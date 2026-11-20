@@ -3,7 +3,7 @@
 **English** · [Italiano](README.it.md)
 
 **Issue with 2026.46** - Image Transparency by color doesn't trigger a reload (reports 'stale'). 
-Close drawing - reopen an if transparency is not shown use the RT_ALPHAON command
+Close drawing - reopen and if transparency is not shown use the RT_ALPHAON command
 
 > **Draft project** It comes with no warranty (see the GPL-3.0 licence): keep a copy of your
 > drawings before using it on real work. Early version (0.x): features may
