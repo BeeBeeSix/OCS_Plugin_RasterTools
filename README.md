@@ -2,8 +2,10 @@
 
 **English** · [Italiano](README.it.md)
 
-> **Hobby project, made just for fun.** It is not intended for professional use
-> and comes with no warranty (see the GPL-3.0 licence): keep a copy of your
+**Issue with 2026.46** - Image Transparency by color doesn't trigger a reload (reports 'stale'). 
+Close drawing - reopen an if transparency is not shown use the RT_ALPHAON command
+
+> **Draft project** It comes with no warranty (see the GPL-3.0 licence): keep a copy of your
 > drawings before using it on real work. Early version (0.x): features may
 > change. What's new is in the [changelog](CHANGELOG.md) (in Italian); ideas and
 > bug reports are welcome in the [Issues](https://github.com/BeeBeeSix/OCS_Plugin_RasterTools/issues).
