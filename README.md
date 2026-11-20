@@ -7,7 +7,7 @@ Close drawing - reopen and if transparency is not shown use the RT_ALPHAON comma
 
 > **Draft project** It comes with no warranty (see the GPL-3.0 licence): keep a copy of your
 > drawings before using it on real work. Early version (0.x): features may
-> change. What's new is in the [changelog](CHANGELOG.md) (in Italian); ideas and
+> change. What's new is in the [changelog](CHANGELOG_en.md) (in English); ideas and
 > bug reports are welcome in the [Issues](https://github.com/BeeBeeSix/OCS_Plugin_RasterTools/issues).
 
 A plugin for [Open CAD Studio](https://github.com/HakanSeven12/OpenCADStudio)
