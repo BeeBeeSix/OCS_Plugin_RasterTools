@@ -11,6 +11,8 @@ lo script `scripts/release.ps1` le sposta nella nuova versione al momento
 del rilascio.
 
 ## [Non rilasciato]
+### Modificato
+- Ricompilato per Open CAD Studio v2026.47 (API plugin 28)
 
 ## [0.10.3] - 2026-11-16
 

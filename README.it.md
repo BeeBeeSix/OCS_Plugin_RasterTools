@@ -1,6 +1,7 @@
 # opencad-raster-plugin — Raster Tools per Open CAD Studio
 
 [English](README.md) · **Italiano**
+- Rebuilt for Open CAD Studio v2026.47 (plugin API 28)
 
 **Problema con la versione 2026.46** - La trasparenza dell'immagine per colore non attiva il ricaricamento (segnala 'obsoleto' / 'stale').
 Chiudi il disegno - riaprilo e, se la trasparenza non viene visualizzata, usa il comando RT_ALPHAON

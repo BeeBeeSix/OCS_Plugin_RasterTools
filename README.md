@@ -1,6 +1,7 @@
 # opencad-raster-plugin — Raster Tools for Open CAD Studio
 
 **English** · [Italiano](README.it.md)
+- Rebuilt for Open CAD Studio v2026.47 (plugin API 28)
 
 **Issue with 2026.46** - Image Transparency by color doesn't trigger a reload (reports 'stale'). 
 Close drawing - reopen and if transparency is not shown use the RT_ALPHAON command

@@ -10,6 +10,9 @@ release notes are taken from). `scripts/release.ps1` moves the entries under
 **[Unreleased]** into the new version when a release is made.
 
 ## [Unreleased]
+### Changed
+- Rebuilt for Open CAD Studio v2026.47 (plugin API 28)
+
 
 ## [0.10.3] - 2026-11-16
 
